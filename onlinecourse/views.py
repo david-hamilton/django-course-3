@@ -1,7 +1,7 @@
 from django.shortcuts import render
 from django.http import HttpResponseRedirect
 # <HINT> Import any new Models here
-from .models import Course, Enrollment
+from .models import Course, Enrollment, Question, Choice, Submission
 from django.contrib.auth.models import User
 from django.shortcuts import get_object_or_404, render, redirect
 from django.urls import reverse
@@ -105,12 +105,66 @@ def enroll(request, course_id):
 
 # <HINT> Create a submit view to create an exam submission record for a course enrollment,
 # you may implement it based on following logic:
-         # Get user and course object, then get the associated enrollment object created when the user enrolled the course
+
+
+         # Get user and course object, 
+         # then get the associated enrollment object created when the user enrolled the course
          # Create a submission object referring to the enrollment
          # Collect the selected choices from exam form
          # Add each selected choice object to the submission object
          # Redirect to show_exam_result with the submission id
-#def submit(request, course_id):
+
+#@login_required
+#@require_POST
+def submit(request, course_id):
+    
+    course = get_object_or_404(Course, pk=course_id)
+    enrollment = get_object_or_404(Enrollment, user=request.user, course=course)
+
+    # Create submission
+    submission = Submission.objects.create(enrollment=enrollment)
+
+    # Collect selected choice ids (using name="choices")
+    try:
+        choice_ids = [int(cid) for cid in request.POST.getlist('choices')]
+    except ValueError:
+        choice_ids = []
+
+    submission.choices.set(Choice.objects.filter(id__in=choice_ids))
+    _grade_submission_and_save(submission, course)
+    return redirect('onlinecourse:show_exam_result', course_id=course.id, submission_id=submission.id)
+
+    
+def show_exam_result(request, course_id, submission_id):
+    submission = get_object_or_404(
+        Submission,
+        pk=submission_id,
+        enrollment__user=request.user,
+        enrollment__course_id=course_id,
+    )
+    course = submission.enrollment.course
+    # If you didn’t compute score earlier, you could compute here as well
+    return render(request, 'onlinecourse/exam_result.html', {
+        'course': course,
+        'submission': submission,
+        'selected_choices': submission.choices.select_related('question'),
+        'questions': course.question_set.all().prefetch_related('choice_set'),
+    })
+
+
+def _grade_submission_and_save(submission, course):
+    """Simple grader: full credit on a question iff selected set == correct set."""
+    selected_ids = set(submission.choices.values_list('id', flat=True))
+    total = 0
+    correct = 0
+    for q in course.question_set.all().prefetch_related('choice_set'):
+        total += 1
+        correct_ids = q.correct_choice_ids()
+        picked_ids = {cid for cid in selected_ids if cid in q.choice_set.values_list('id', flat=True)}
+        if picked_ids == correct_ids:
+            correct += 1
+    submission.score_percent = (100.0 * correct / total) if total else 0.0
+    submission.save()
 
 
 # An example method to collect the selected choices from the exam form from the request object

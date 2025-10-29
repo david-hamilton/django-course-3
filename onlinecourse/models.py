@@ -116,10 +116,18 @@ class Choice(models.Model):
     content = models.CharField(max_length=200)
     is_correct = models.BooleanField(default=False)
 
+    def __str__(self):
+        return self.content
+
 # One enrollment could have multiple submissions
 # One submission could have multiple choices
 # One choice could belong to multiple submissions
 
 class Submission(models.Model):
     enrollment = models.ForeignKey(Enrollment, on_delete=models.CASCADE)
-    choices = models.ManyToManyField(Choice)
+    choices = models.ManyToManyField(Choice, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    score_percent = models.FloatField(null=True, blank=True)
+
+    def __str__(self):
+        return f"Submission     {self.id} for {self.enrollment}"
