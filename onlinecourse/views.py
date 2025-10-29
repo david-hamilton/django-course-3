@@ -8,6 +8,8 @@ from django.urls import reverse
 from django.views import generic
 from django.contrib.auth import login, logout, authenticate
 import logging
+from django.contrib.auth.decorators import login_required
+from django.views.decorators.http import require_POST
 # Get an instance of a logger
 logger = logging.getLogger(__name__)
 # Create your views here.
@@ -114,8 +116,8 @@ def enroll(request, course_id):
          # Add each selected choice object to the submission object
          # Redirect to show_exam_result with the submission id
 
-#@login_required
-#@require_POST
+@login_required
+@require_POST
 def submit(request, course_id):
     
     course = get_object_or_404(Course, pk=course_id)
