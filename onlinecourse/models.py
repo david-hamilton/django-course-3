@@ -103,9 +103,19 @@ class Question(models.Model):
     def __str__(self):
         return "Question: " + self.content
     
+    def correct_choice_ids(self):
+        return set(self.choice_set.filter(is_correct=True).values_list('id', flat=True))
+    
+    def is_fully_correct(self, selected_ids):
+        selected_q = set(self.choice_set.filter(id__in=selected_ids).values_list('id', flat=True))
+        return selected_q == self.correct_choice_ids()
+    
+    def earned_points(self, selected_ids) -> int:
+        return self.grade_point if self.is_fully_correct(selected_ids) else 0
+
     def is_get_score(self, selected_ids):
         all_answers = self.choice_set.filter(is_correct=True).count()
-        selected_correct = self.choice_set.filter(is_correct=True, id_in=selected_ids).count()
+        selected_correct = self.choice_set.filter(is_correct=True, id__in=selected_ids).count()
         if all_answers == selected_correct:
             return True
         else:
@@ -126,7 +136,7 @@ class Choice(models.Model):
 class Submission(models.Model):
     enrollment = models.ForeignKey(Enrollment, on_delete=models.CASCADE)
     choices = models.ManyToManyField(Choice, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
     score_percent = models.FloatField(null=True, blank=True)
 
     def __str__(self):

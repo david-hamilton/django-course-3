@@ -39,16 +39,47 @@
     {% if grade > 80 %}
     <div class="alert alert-success">
        <!--HINT Display passed info -->
+       <p><b>Congratulations, {{user.first_name}}!</b> You have passed the exam and completed the course with score {{grade}}</p>
     </div>
         {% else %}
         <div class="alert alert-danger">
             <!--HINT Display failed info -->
+            <p><b>Failed!</b> Sorry, {{user.first_name}}! You have failed the exam with score {{grade}}</p>
         </div>
         <a class="btn btn-link text-danger" href="{% url 'onlinecourse:course_details' course.id %}">Re-test</a>
         {% endif %}
         <div class="card-columns-vertical mt-1">
         <h5 class="">Exam results</h5>
             <!--HINT Display exam results-->
+            {% for d in details %}
+                <div class="card mt-1">
+                    <div class="card-header">{{d.question.content}}</div>
+                    <div class="card-body">
+                        {% for choice in d.question.choice_set.all %}
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="choice-{{choice.id}}" value="{{ choice.id }}" {% if choice.id in d.selected_ids %} checked {% endif %} disabled>
+                            <label class="form-check-label" for="choice-{{choice.id}}">{{choice.content}}</label>
+                        </div>
+                        <div class="card-text">
+                                {% if choice.is_correct and choice.id in d.selected_ids %}
+                                    <div class="text-success">Correct answer: {{choice.content}}</div>
+                                {% else %}{% if choice.is_correct and not choice.id in d.selected_ids %}
+                                    <div class="text-warning">Wrong. Should have chosen: {{choice.content}} </div>
+                                {% else %}{% if not choice.is_correct and choice.id in d.selected_ids %}
+                                    <div class="text-warning">Wrong choice: {{choice.content}}</div>
+                                {% else %}
+                                {% endif %}{% endif %}{% endif %}
+
+                        </div>
+
+                        {% endfor %}
+                    </div>
+                    <div class="form-check">
+                        
+                    </div>
+                </div>
+            {% endfor %}
+
         </div>
     </div>
 </body>

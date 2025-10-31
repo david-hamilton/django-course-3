@@ -104,18 +104,6 @@ def enroll(request, course_id):
 
     return HttpResponseRedirect(reverse(viewname='onlinecourse:course_details', args=(course.id,)))
 
-
-# <HINT> Create a submit view to create an exam submission record for a course enrollment,
-# you may implement it based on following logic:
-
-
-         # Get user and course object, 
-         # then get the associated enrollment object created when the user enrolled the course
-         # Create a submission object referring to the enrollment
-         # Collect the selected choices from exam form
-         # Add each selected choice object to the submission object
-         # Redirect to show_exam_result with the submission id
-
 @login_required
 @require_POST
 def submit(request, course_id):
@@ -133,43 +121,12 @@ def submit(request, course_id):
         choice_ids = []
 
     submission.choices.set(Choice.objects.filter(id__in=choice_ids))
-    _grade_submission_and_save(submission, course)
-    return redirect('onlinecourse:show_exam_result', course_id=course.id, submission_id=submission.id)
-
-    
-def show_exam_result(request, course_id, submission_id):
-    submission = get_object_or_404(
-        Submission,
-        pk=submission_id,
-        enrollment__user=request.user,
-        enrollment__course_id=course_id,
-    )
-    course = submission.enrollment.course
-    # If you didn’t compute score earlier, you could compute here as well
-    return render(request, 'onlinecourse/exam_result.html', {
-        'course': course,
-        'submission': submission,
-        'selected_choices': submission.choices.select_related('question'),
-        'questions': course.question_set.all().prefetch_related('choice_set'),
-    })
-
-
-def _grade_submission_and_save(submission, course):
-    """Simple grader: full credit on a question iff selected set == correct set."""
-    selected_ids = set(submission.choices.values_list('id', flat=True))
-    total = 0
-    correct = 0
-    for q in course.question_set.all().prefetch_related('choice_set'):
-        total += 1
-        correct_ids = q.correct_choice_ids()
-        picked_ids = {cid for cid in selected_ids if cid in q.choice_set.values_list('id', flat=True)}
-        if picked_ids == correct_ids:
-            correct += 1
-    submission.score_percent = (100.0 * correct / total) if total else 0.0
+    earned, total, _ = grade_course(course, choice_ids)
+    submission.score_percent = (100.0 * earned / total) if total else 0.0
     submission.save()
 
+    return redirect('onlinecourse:show_exam_result', course_id=course.id, submission_id=submission.id)
 
-# An example method to collect the selected choices from the exam form from the request object
 def extract_answers(request):
    submitted_anwsers = []
    for key in request.POST:
@@ -180,13 +137,53 @@ def extract_answers(request):
    return submitted_anwsers
 
 
-# <HINT> Create an exam result view to check if learner passed exam and show their question results and result for each question,
-# you may implement it based on the following logic:
-        # Get course and submission based on their ids
-        # Get the selected choice ids from the submission record
-        # For each selected choice, check if it is a correct answer or not
-        # Calculate the total score
-#def show_exam_result(request, course_id, submission_id):
 
+@login_required
+def show_exam_result(request, course_id, submission_id):
+    submission = get_object_or_404(
+        Submission,
+        pk=submission_id,
+        enrollment__user=request.user,
+        enrollment__course_id=course_id,
+    )
+    course = submission.enrollment.course
+    selected_ids = list(submission.choices.values_list('id', flat=True))
 
+    earned, total, details = grade_course(course, selected_ids)
+
+    return render(request, 'onlinecourse/exam_result_bootstrap.html', {
+        'course': course,
+        'submission': submission,
+        'selected_choices': submission.choices.select_related('question'),
+        'questions': course.question_set.all().prefetch_related('choice_set'),
+        'details': details,
+        'points_earned': earned,
+        'points_total': total,
+        'grade': (100.0 * earned / total) if total else 0.0,
+    })
+
+def grade_course(course, selected_ids):
+    questions = course.question_set.all().prefetch_related('choice_set')
+    earned = 0
+    total = 0
+    details = []
+
+    for q in questions:
+        pts = getattr(q, 'grade_point', getattr(q, 'grade', 1))
+        correct_ids = set(q.choice_set.filter(is_correct=True).values_list('id', flat=True))
+        selected_q_ids = set(Choice.objects.filter(id__in=selected_ids, question = q).values_list('id', flat=True))
+
+        is_correct = (selected_q_ids == correct_ids)
+        if is_correct:
+            earned += pts
+        total += pts
+        details.append({
+            'question': q,
+            'correct_ids': list(correct_ids),
+            'selected_ids': list(selected_q_ids),
+            'points': pts,
+            'is_correct': is_correct,
+        })
+    
+    return earned, total, details
 
